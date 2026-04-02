@@ -99,6 +99,7 @@ func (s *Server) startTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 400, err.Error())
 		return
 	}
+	tools.FireWebhook("tool.started", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "started", "slug": slug})
 }
 
@@ -108,6 +109,7 @@ func (s *Server) stopTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 400, err.Error())
 		return
 	}
+	tools.FireWebhook("tool.stopped", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "stopped", "slug": slug})
 }
 
@@ -117,6 +119,7 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 500, err.Error())
 		return
 	}
+	tools.FireWebhook("tool.installed", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "installed", "slug": slug})
 }
 
