@@ -1,26 +1,102 @@
 package server
+
 import "net/http"
-func(s *Server)dashboard(w http.ResponseWriter,r *http.Request){w.Header().Set("Content-Type","text/html; charset=utf-8");w.Write([]byte(dashHTML))}
-const dashHTML=`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Hub</title>
-<style>:root{--bg:#1a1410;--bg2:#241e18;--bg3:#2e261e;--rust:#c45d2c;--rl:#e8753a;--leather:#a0845c;--cream:#f0e6d3;--cm:#7a7060;--gold:#d4a843;--green:#4a9e5c;--mono:'JetBrains Mono',Consolas,monospace;--serif:'Libre Baskerville',Georgia,serif}*{margin:0;padding:0;box-sizing:border-box}body{background:var(--bg);color:var(--cream);font-family:var(--mono);font-size:13px;line-height:1.6}.hdr{padding:.6rem 1.2rem;border-bottom:1px solid var(--bg3);display:flex;justify-content:space-between;align-items:center}.hdr h1{font-family:var(--serif);font-size:1rem}.hdr h1 span{color:var(--rl)}.sub{font-size:.65rem;color:var(--cm)}.main{max-width:700px;margin:0 auto;padding:1rem}.search{width:100%;background:var(--bg2);border:1px solid var(--bg3);color:var(--cream);padding:.4rem .6rem;font-family:var(--mono);font-size:.78rem;margin-bottom:.6rem;outline:none}.search:focus{border-color:var(--rust)}.stats{display:flex;gap:1rem;margin-bottom:.8rem;flex-wrap:wrap}.stat{text-align:center}.stat-n{font-size:1.2rem;color:var(--rl);font-family:var(--serif)}.stat-l{font-size:.55rem;color:var(--cm);text-transform:uppercase;letter-spacing:1px}.btn{font-family:var(--mono);font-size:.68rem;padding:.3rem .6rem;border:1px solid;cursor:pointer;background:transparent}.btn-p{border-color:var(--rust);color:var(--rl)}.btn-p:hover{background:var(--rust);color:var(--cream)}.item{background:var(--bg2);border:1px solid var(--bg3);padding:.6rem;margin-bottom:.3rem;cursor:pointer;transition:border-color .15s}.item:hover{border-color:var(--leather)}.item h3{font-size:.82rem;margin-bottom:.15rem}.item-meta{font-size:.65rem;color:var(--cm);display:flex;gap:.5rem;flex-wrap:wrap}.empty{text-align:center;padding:2rem;color:var(--cm);font-style:italic;font-family:var(--serif)}.modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:100}.modal{background:var(--bg2);border:1px solid var(--bg3);padding:1.5rem;width:90%;max-width:500px;max-height:90vh;overflow-y:auto}.modal h2{font-family:var(--serif);font-size:.9rem;margin-bottom:1rem}label.fl{display:block;font-size:.65rem;color:var(--leather);text-transform:uppercase;letter-spacing:1px;margin-bottom:.2rem;margin-top:.5rem}input[type=text],input[type=number]{background:var(--bg);border:1px solid var(--bg3);color:var(--cream);padding:.35rem .5rem;font-family:var(--mono);font-size:.78rem;width:100%;outline:none}.del{color:var(--cm);cursor:pointer;font-size:.65rem;float:right}.del:hover{color:var(--rust)}</style></head>
-<body><div class="hdr"><div><h1><span>Stockyard</span> Hub</h1><div class="sub">Self-hosted request relay and inspector</div></div><button class="btn btn-p" onclick="showModal()">+ New</button></div>
-<div class="main"><div class="stats" id="stats"></div>
-<input class="search" id="search" placeholder="Search services..." oninput="debounceSearch()">
-<div id="list"></div></div>
-<div class="modal-bg" id="modal" style="display:none" onclick="if(event.target===this)hideModal()"><div class="modal"><h2 id="mt">New Service</h2>
-<label class="fl">Name</label><input type="text" id="f-name" placeholder="Name"><label class="fl">Url</label><input type="text" id="f-url" placeholder="Url"><label class="fl">Type</label><input type="text" id="f-type" placeholder="Type"><label class="fl">Owner</label><input type="text" id="f-owner" placeholder="Owner"><label class="fl">Version</label><input type="text" id="f-version" placeholder="Version"><label class="fl">Status</label><input type="text" id="f-status" placeholder="Status"><label class="fl">Health Url</label><input type="text" id="f-health_url" placeholder="Health Url"><label class="fl">Notes</label><input type="text" id="f-notes" placeholder="Notes">
-<div style="margin-top:1rem;display:flex;gap:.5rem"><button class="btn btn-p" onclick="save()">Save</button><button class="btn" style="color:var(--cm);border-color:var(--bg3)" onclick="hideModal()">Cancel</button></div></div></div>
+
+func (s *Server) dashboard(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(dashHTML))
+}
+
+const dashHTML = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Stockyard Hub</title>
+<style>
+:root{--bg:#1a1410;--bg2:#241e18;--bg3:#2e261e;--rust:#c45d2c;--rl:#e8753a;--leather:#a0845c;--cream:#f0e6d3;--cd:#bfb5a3;--cm:#7a7060;--gold:#d4a843;--green:#4a9e5c;--red:#c45d2c;--mono:'JetBrains Mono',Consolas,monospace;--serif:'Libre Baskerville',Georgia,serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--cream);font-family:var(--mono);font-size:13px;line-height:1.6}
+.hdr{padding:.8rem 1.5rem;border-bottom:1px solid var(--bg3);display:flex;justify-content:space-between;align-items:center}
+.hdr h1{font-family:var(--serif);font-size:1.1rem}.hdr h1 span{color:var(--rl)}
+.stats{display:flex;gap:1.5rem;padding:.8rem 1.5rem;border-bottom:1px solid var(--bg3);flex-wrap:wrap}
+.stat{text-align:center}.stat-n{font-size:1.4rem;color:var(--rl);font-family:var(--serif)}.stat-l{font-size:.55rem;color:var(--cm);text-transform:uppercase;letter-spacing:1px}
+.controls{padding:.8rem 1.5rem;display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.search{background:var(--bg2);border:1px solid var(--bg3);color:var(--cream);padding:.35rem .6rem;font-family:var(--mono);font-size:.78rem;outline:none;flex:1;min-width:200px}
+.search:focus{border-color:var(--rust)}
+.fbtn{font-family:var(--mono);font-size:.6rem;padding:.25rem .5rem;border:1px solid var(--bg3);color:var(--cm);background:transparent;cursor:pointer}
+.fbtn:hover,.fbtn.active{border-color:var(--leather);color:var(--leather)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:.5rem;padding:1rem 1.5rem}
+.tool{background:var(--bg2);border:1px solid var(--bg3);padding:.7rem;transition:border-color .15s}
+.tool:hover{border-color:var(--leather)}
+.tool-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:.3rem}
+.tool-name{font-size:.85rem;font-weight:bold}
+.tool-status{font-size:.6rem;padding:.15rem .4rem;border-radius:2px;text-transform:uppercase;letter-spacing:1px}
+.tool-status.healthy{background:#1a3a1a;color:var(--green)}
+.tool-status.stopped{background:#2e261e;color:var(--cm)}
+.tool-status.not_installed{background:var(--bg);color:var(--cm)}
+.tool-status.unhealthy{background:#3a1a1a;color:var(--red)}
+.tool-tagline{font-size:.72rem;color:var(--cd);margin-bottom:.4rem}
+.tool-meta{font-size:.6rem;color:var(--cm);display:flex;gap:.5rem}
+.tool-actions{margin-top:.4rem;display:flex;gap:.3rem}
+.act{font-family:var(--mono);font-size:.6rem;padding:.2rem .5rem;border:1px solid;cursor:pointer;background:transparent}
+.act-start{border-color:var(--green);color:var(--green)}.act-start:hover{background:var(--green);color:var(--bg)}
+.act-stop{border-color:var(--red);color:var(--red)}.act-stop:hover{background:var(--red);color:var(--cream)}
+.act-install{border-color:var(--gold);color:var(--gold)}.act-install:hover{background:var(--gold);color:var(--bg)}
+.act-open{border-color:var(--leather);color:var(--leather)}.act-open:hover{background:var(--leather);color:var(--bg)}
+.act:disabled{opacity:.3;cursor:default}
+.toast{position:fixed;bottom:1rem;right:1rem;background:var(--bg2);border:1px solid var(--green);color:var(--green);padding:.5rem 1rem;font-size:.75rem;display:none;z-index:100}
+</style></head>
+<body>
+<div class="hdr"><h1><span>Stockyard</span> Hub</h1><div style="font-size:.7rem;color:var(--cm)">Tool Management Dashboard</div></div>
+<div class="stats" id="stats"></div>
+<div class="controls">
+  <input class="search" id="search" placeholder="Search tools..." oninput="debounceLoad()">
+  <button class="fbtn active" onclick="setFilter('')">All</button>
+  <button class="fbtn" onclick="setFilter('installed')">Installed</button>
+  <button class="fbtn" onclick="setFilter('running')">Running</button>
+  <button class="fbtn" onclick="setCat('')">Any category</button>
+  <button class="fbtn" onclick="setCat('developer')">Dev</button>
+  <button class="fbtn" onclick="setCat('operations')">Ops</button>
+  <button class="fbtn" onclick="setCat('finance')">Finance</button>
+  <button class="fbtn" onclick="setCat('creator')">Creator</button>
+  <button class="fbtn" onclick="setCat('personal')">Personal</button>
+</div>
+<div class="grid" id="grid"></div>
+<div class="toast" id="toast"></div>
+
 <script>
-const API="/api/services";let editId=null,timer=null,curFilter="";
-function stc(s){return{"active":"#4a9e5c","open":"#4a9e5c","available":"#4a9e5c","growing":"#4a9e5c","done":"#4a9e5c","completed":"#4a9e5c","published":"#4a9e5c","resolved":"#4a9e5c","decided":"#4a9e5c","closed_won":"#4a9e5c","converted":"#4a9e5c","live":"#4a9e5c","applied":"#4a9e5c","sent":"#4a9e5c","approved":"#4a9e5c","booked":"#d4a843","in_progress":"#d4a843","processing":"#d4a843","reading":"#d4a843","investigating":"#d4a843","identified":"#d4a843","monitoring":"#d4a843","deploying":"#d4a843","qualified":"#d4a843","proposal":"#d4a843","negotiation":"#d4a843","assigned":"#d4a843","contacted":"#d4a843","pending":"#a0845c","draft":"#a0845c","unread":"#a0845c","new":"#a0845c","lead":"#a0845c","planning":"#a0845c","proposed":"#a0845c","trial":"#a0845c","failed":"#c45d2c","closed":"#7a7060","archived":"#7a7060","inactive":"#7a7060","closed_lost":"#c45d2c","churned":"#c45d2c","declined":"#c45d2c","rejected":"#c45d2c","rolled_back":"#c45d2c","superseded":"#7a7060","dormant":"#7a7060","paused":"#7a7060","stalled":"#c45d2c","away":"#a0845c","busy":"#c45d2c","offline":"#7a7060","dnd":"#c45d2c","bronze":"#a0845c","silver":"#bfb5a3","gold":"#d4a843","platinum":"#f0e6d3"}[s]||"#7a7060"}
-function showModal(id){editId=id||null;document.getElementById("mt").textContent=id?"Edit":"New";if(id){fetch(API+"/"+id).then(r=>r.json()).then(e=>{document.getElementById("f-name").value=e.name||"";document.getElementById("f-url").value=e.url||"";document.getElementById("f-type").value=e.type||"";document.getElementById("f-owner").value=e.owner||"";document.getElementById("f-version").value=e.version||"";document.getElementById("f-status").value=e.status||"";document.getElementById("f-health_url").value=e.health_url||"";document.getElementById("f-notes").value=e.notes||"";})}else{document.getElementById("f-name").value="";document.getElementById("f-url").value="";document.getElementById("f-type").value="";document.getElementById("f-owner").value="";document.getElementById("f-version").value="";document.getElementById("f-status").value="";document.getElementById("f-health_url").value="";document.getElementById("f-notes").value=""}document.getElementById("modal").style.display="flex"}
-function hideModal(){document.getElementById("modal").style.display="none";editId=null}
-function debounceSearch(){clearTimeout(timer);timer=setTimeout(load,300)}
-function filterBy(v){curFilter=v;load()}
-async function loadStats(){const r=await fetch("/api/stats");const d=await r.json();const el=document.getElementById("stats");let h='<div class="stat"><div class="stat-n">'+d.total+'</div><div class="stat-l">Total</div></div>';if(d.by_status){for(const[k,v]of Object.entries(d.by_status)){h+='<div class="stat"><div class="stat-n" style="color:'+stc(k)+'">'+v+'</div><div class="stat-l">'+k.replace(/_/g," ")+'</div></div>'}};el.innerHTML=h}
-async function load(){let url=API;const q=document.getElementById("search").value;const p=[];if(q)p.push("q="+encodeURIComponent(q));if(curFilter)p.push("status="+curFilter);if(p.length)url+="?"+p.join("&");const r=await fetch(url);const d=await r.json();const items=d.services||[];const el=document.getElementById("list");if(!items.length){el.innerHTML='<div class="empty">No services yet</div>';loadStats();return}
-el.innerHTML=items.map(e=>{return '<div class="item" ondblclick="showModal(\''+e.id+'\')"><span class="del" onclick="event.stopPropagation();del(\''+e.id+'\')">x</span><h3>'+e.name+'</h3><div class="item-meta"><span>${e.url||"\u2014"}</span><span>${e.type||"\u2014"}</span><span>${e.owner||"\u2014"}</span><span>${e.version||"\u2014"}</span></div></div>'}).join("");loadStats()}
-async function save(){const body={"name":document.getElementById("f-name").value,"url":document.getElementById("f-url").value,"type":document.getElementById("f-type").value,"owner":document.getElementById("f-owner").value,"version":document.getElementById("f-version").value,"status":document.getElementById("f-status").value,"health_url":document.getElementById("f-health_url").value,"notes":document.getElementById("f-notes").value};const method=editId?"PUT":"POST";const url=editId?API+"/"+editId:API;await fetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});hideModal();load()}
-async function del(id){await fetch(API+"/"+id,{method:"DELETE"});load()}
-load();loadStats()
-</script></body></html>`
+let filter='',cat='',timer=null;
+function debounceLoad(){clearTimeout(timer);timer=setTimeout(load,200)}
+function setFilter(f){filter=f;document.querySelectorAll('.fbtn').forEach((b,i)=>{if(i<3)b.classList.toggle('active',(!f&&i===0)||(f==='installed'&&i===1)||(f==='running'&&i===2))});load()}
+function setCat(c){cat=c;document.querySelectorAll('.fbtn').forEach((b,i)=>{if(i>=3)b.classList.toggle('active',(!c&&i===3)||(c==='developer'&&i===4)||(c==='operations'&&i===5)||(c==='finance'&&i===6)||(c==='creator'&&i===7)||(c==='personal'&&i===8))});load()}
+
+async function loadStats(){
+  const r=await fetch('/api/stats');const d=await r.json();
+  document.getElementById('stats').innerHTML=[
+    {n:d.total,l:'Total tools'},{n:d.installed,l:'Installed'},{n:d.running,l:'Running'},{n:d.healthy,l:'Healthy'}
+  ].map(s=>'<div class="stat"><div class="stat-n">'+s.n+'</div><div class="stat-l">'+s.l+'</div></div>').join('');
+}
+
+async function load(){
+  let url='/api/tools?';
+  const q=document.getElementById('search').value;
+  if(q)url+='q='+encodeURIComponent(q)+'&';
+  if(filter)url+='status='+filter+'&';
+  if(cat)url+='category='+cat+'&';
+  const r=await fetch(url);const d=await r.json();
+  const tools=d.tools||[];
+  document.getElementById('grid').innerHTML=tools.map(t=>{
+    const actions=t.health==='not_installed'
+      ?'<button class="act act-install" onclick="install(event,\''+t.slug+'\')">Install</button>'
+      :t.running
+        ?'<button class="act act-stop" onclick="stop(event,\''+t.slug+'\')">Stop</button><button class="act act-open" onclick="window.open(\'http://localhost:'+t.port+'/ui\')">Open :'+t.port+'</button>'
+        :'<button class="act act-start" onclick="start(event,\''+t.slug+'\')">Start</button>';
+    return '<div class="tool"><div class="tool-top"><div class="tool-name">'+t.name+'</div><div class="tool-status '+t.health+'">'+t.health.replace('_',' ')+'</div></div><div class="tool-tagline">'+t.tagline+'</div><div class="tool-meta"><span>:'+t.port+'</span><span>'+t.category+'</span><span>stockyard-'+t.slug+'</span></div><div class="tool-actions">'+actions+'</div></div>';
+  }).join('');
+  loadStats();
+}
+
+async function start(e,slug){e.target.disabled=true;e.target.textContent='Starting...';await fetch('/api/tools/'+slug+'/start',{method:'POST'});toast(slug+' started');setTimeout(load,1500)}
+async function stop(e,slug){e.target.disabled=true;await fetch('/api/tools/'+slug+'/stop',{method:'POST'});toast(slug+' stopped');setTimeout(load,500)}
+async function install(e,slug){e.target.disabled=true;e.target.textContent='Installing...';await fetch('/api/tools/'+slug+'/install',{method:'POST'});toast(slug+' installed');setTimeout(load,2000)}
+
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.style.display='block';setTimeout(()=>t.style.display='none',3000)}
+
+load()
+</script></body></html>` 
