@@ -56,7 +56,7 @@ func New(mgr *tools.Manager, db *store.DB) *Server {
 	s.mux.HandleFunc("GET /ui/", s.dashboard)
 
 	// Tool proxy (serves tool dashboards through Hub)
-	s.mux.HandleFunc("/tool/{slug}/{path...}", s.proxyTool)
+	s.mux.HandleFunc("GET /tool/{slug}/{path...}", s.proxyTool)
 
 	s.mux.HandleFunc("GET /", s.root)
 
