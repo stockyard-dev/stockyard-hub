@@ -330,11 +330,26 @@ func (s *Server) proxyTool(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
+	ct := resp.Header.Get("Content-Type")
+	body, _ := io.ReadAll(resp.Body)
+
+	// Rewrite API URLs in HTML so dashboard fetches route through proxy
+	if strings.Contains(ct, "text/html") {
+		prefix := "/tool/" + slug
+		html := string(body)
+		html = strings.ReplaceAll(html, `"/api/`, `"`+prefix+`/api/`)
+		html = strings.ReplaceAll(html, `'/api/`, `'`+prefix+`/api/`)
+		body = []byte(html)
+	}
+
 	for k, vv := range resp.Header {
 		for _, v := range vv {
-			w.Header().Add(k, v)
+			if k != "Content-Length" {
+				w.Header().Add(k, v)
+			}
 		}
 	}
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(body)))
 	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	w.Write(body)
 }
