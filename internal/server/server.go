@@ -2,10 +2,13 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/stockyard-dev/stockyard-hub/internal/store"
 	"github.com/stockyard-dev/stockyard-hub/internal/tools"
@@ -51,6 +54,10 @@ func New(mgr *tools.Manager, db *store.DB) *Server {
 	// Dashboard
 	s.mux.HandleFunc("GET /ui", s.dashboard)
 	s.mux.HandleFunc("GET /ui/", s.dashboard)
+
+	// Tool proxy (serves tool dashboards through Hub)
+	s.mux.HandleFunc("/tool/{slug}/{path...}", s.proxyTool)
+
 	s.mux.HandleFunc("GET /", s.root)
 
 	return s
@@ -286,4 +293,48 @@ func (s *Server) seedActivity(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.LogActivity(body.Tool, body.Action, body.Detail)
 	wj(w, 200, map[string]string{"status": "ok"})
+}
+
+// ── Tool Proxy (for demo) ──
+
+func (s *Server) proxyTool(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	t := tools.FindTool(slug)
+	if t == nil {
+		we(w, 404, "tool not found")
+		return
+	}
+
+	// Build target URL
+	rest := r.PathValue("path")
+	if rest == "" {
+		rest = "/"
+	}
+	target := fmt.Sprintf("http://localhost:%d/%s", t.Port, rest)
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	proxyReq, err := http.NewRequest(r.Method, target, r.Body)
+	if err != nil {
+		we(w, 502, err.Error())
+		return
+	}
+	proxyReq.Header = r.Header.Clone()
+
+	resp, err := client.Do(proxyReq)
+	if err != nil {
+		we(w, 502, "tool not reachable: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	io.Copy(w, resp.Body)
 }
