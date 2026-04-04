@@ -202,12 +202,20 @@ func (m *Manager) findProcess(slug string) int {
 func (m *Manager) checkHealth(port int) string {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/api/health", port))
-	if err != nil {
-		return "unhealthy"
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 200 {
+	if err == nil && resp.StatusCode == 200 {
+		resp.Body.Close()
 		return "healthy"
+	}
+	if resp != nil {
+		resp.Body.Close()
+	}
+	resp, err = client.Get(fmt.Sprintf("http://localhost:%d/health", port))
+	if err == nil && resp.StatusCode == 200 {
+		resp.Body.Close()
+		return "healthy"
+	}
+	if resp != nil {
+		resp.Body.Close()
 	}
 	return "unhealthy"
 }
