@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/stockyard-dev/stockyard-hub/internal/store"
@@ -26,15 +27,16 @@ func New(mgr *tools.Manager, db *store.DB) *Server {
 	s.mux.HandleFunc("POST /api/tools/{slug}/start", s.startTool)
 	s.mux.HandleFunc("POST /api/tools/{slug}/stop", s.stopTool)
 	s.mux.HandleFunc("POST /api/tools/{slug}/install", s.installTool)
+	s.mux.HandleFunc("POST /api/tools/{slug}/restart", s.restartTool)
 	s.mux.HandleFunc("GET /api/tools/{slug}", s.getTool)
+	s.mux.HandleFunc("GET /api/tools/{slug}/logs", s.toolLogs)
+	s.mux.HandleFunc("GET /api/tools/{slug}/health-history", s.toolHealthHistory)
 
-	// Stats & Health
+	// Global
 	s.mux.HandleFunc("GET /api/stats", s.stats)
-	s.mux.HandleFunc("GET /api/health", s.health)
-	s.mux.HandleFunc("GET /api/health/history", s.healthHistory)
-
-	// Activity
 	s.mux.HandleFunc("GET /api/activity", s.activity)
+	s.mux.HandleFunc("GET /api/health", s.health)
+	s.mux.HandleFunc("GET /api/health-history", s.globalHealthHistory)
 
 	// License
 	s.mux.HandleFunc("GET /api/license", s.getLicense)
@@ -60,7 +62,6 @@ func wj(w http.ResponseWriter, code int, v any) {
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(v)
 }
-
 func we(w http.ResponseWriter, code int, msg string) {
 	wj(w, code, map[string]string{"error": msg})
 }
@@ -80,7 +81,6 @@ func (s *Server) listTools(w http.ResponseWriter, r *http.Request) {
 	q := strings.ToLower(r.URL.Query().Get("q"))
 	cat := r.URL.Query().Get("category")
 	status := r.URL.Query().Get("status")
-
 	var filtered []tools.Status
 	for _, st := range statuses {
 		if q != "" && !strings.Contains(strings.ToLower(st.Name), q) && !strings.Contains(strings.ToLower(st.Tagline), q) && !strings.Contains(strings.ToLower(st.Slug), q) {
@@ -123,7 +123,7 @@ func (s *Server) startTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 400, err.Error())
 		return
 	}
-	s.db.LogActivity(slug, "started", "Tool started")
+	s.db.LogActivity(slug, "started", "Started via Hub")
 	tools.FireWebhook("tool.started", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "started", "slug": slug})
 }
@@ -134,9 +134,20 @@ func (s *Server) stopTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 400, err.Error())
 		return
 	}
-	s.db.LogActivity(slug, "stopped", "Tool stopped")
+	s.db.LogActivity(slug, "stopped", "Stopped via Hub")
 	tools.FireWebhook("tool.stopped", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "stopped", "slug": slug})
+}
+
+func (s *Server) restartTool(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	s.mgr.Stop(slug)
+	if err := s.mgr.Start(slug); err != nil {
+		we(w, 400, err.Error())
+		return
+	}
+	s.db.LogActivity(slug, "restarted", "Restarted via Hub")
+	wj(w, 200, map[string]string{"status": "restarted", "slug": slug})
 }
 
 func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
@@ -145,12 +156,32 @@ func (s *Server) installTool(w http.ResponseWriter, r *http.Request) {
 		we(w, 500, err.Error())
 		return
 	}
-	s.db.LogActivity(slug, "installed", "Tool installed")
+	s.db.LogActivity(slug, "installed", "Installed via Hub")
 	tools.FireWebhook("tool.installed", slug, slug, 0)
 	wj(w, 200, map[string]string{"status": "installed", "slug": slug})
 }
 
-// ── Stats & Health ──
+func (s *Server) toolLogs(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	lines, _ := strconv.Atoi(r.URL.Query().Get("lines"))
+	if lines <= 0 {
+		lines = 100
+	}
+	content := readToolLog(slug, lines)
+	wj(w, 200, map[string]string{"slug": slug, "logs": content})
+}
+
+func (s *Server) toolHealthHistory(w http.ResponseWriter, r *http.Request) {
+	slug := r.PathValue("slug")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	records := s.db.HealthHistory(slug, limit)
+	if records == nil {
+		records = []store.HealthRecord{}
+	}
+	wj(w, 200, map[string]any{"slug": slug, "history": records})
+}
+
+// ── Global ──
 
 func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
 	statuses := s.mgr.Discover()
@@ -171,12 +202,18 @@ func (s *Server) stats(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	wj(w, 200, map[string]any{
-		"total":       len(statuses),
-		"installed":   installed,
-		"running":     running,
-		"healthy":     healthy,
-		"by_category": byCat,
+		"total": len(statuses), "installed": installed,
+		"running": running, "healthy": healthy, "by_category": byCat,
 	})
+}
+
+func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	records := s.db.RecentActivity(limit)
+	if records == nil {
+		records = []store.ActivityRecord{}
+	}
+	wj(w, 200, map[string]any{"activity": records})
 }
 
 func (s *Server) health(w http.ResponseWriter, r *http.Request) {
@@ -193,34 +230,24 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 	wj(w, 200, map[string]any{"status": "ok", "service": "hub", "tools_installed": installed, "tools_running": running})
 }
 
-func (s *Server) healthHistory(w http.ResponseWriter, r *http.Request) {
+func (s *Server) globalHealthHistory(w http.ResponseWriter, r *http.Request) {
 	tool := r.URL.Query().Get("tool")
-	records := s.db.HealthHistory(tool, 100)
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	records := s.db.HealthHistory(tool, limit)
 	if records == nil {
 		records = []store.HealthRecord{}
 	}
 	wj(w, 200, map[string]any{"records": records})
 }
 
-// ── Activity ──
-
-func (s *Server) activity(w http.ResponseWriter, r *http.Request) {
-	records := s.db.RecentActivity(50)
-	if records == nil {
-		records = []store.ActivityRecord{}
-	}
-	wj(w, 200, map[string]any{"activity": records})
-}
-
 // ── License ──
 
 func (s *Server) getLicense(w http.ResponseWriter, r *http.Request) {
-	key := s.db.GetConfig("license_key")
+	cfg := readCLIConfig()
+	key, _ := cfg["license_key"].(string)
 	masked := ""
-	if key != "" && len(key) > 6 {
+	if len(key) > 6 {
 		masked = key[:6] + strings.Repeat("*", len(key)-6)
-	} else if key != "" {
-		masked = "***"
 	}
 	wj(w, 200, map[string]any{"license_key": masked, "tier": s.limits.Tier})
 }
@@ -229,12 +256,17 @@ func (s *Server) setLicense(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Key string `json:"key"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		we(w, 400, "invalid json")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Key == "" {
+		we(w, 400, "key required")
 		return
 	}
-	s.db.SetConfig("license_key", body.Key)
-	s.db.LogActivity("hub", "license_updated", "License key updated")
+	cfg := readCLIConfig()
+	cfg["license_key"] = body.Key
+	if err := writeCLIConfig(cfg); err != nil {
+		we(w, 500, err.Error())
+		return
+	}
+	s.db.LogActivity("hub", "license_set", "License key updated")
 	wj(w, 200, map[string]string{"status": "saved"})
 }
 

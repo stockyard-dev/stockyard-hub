@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/stockyard-dev/stockyard-hub/internal/server"
 	"github.com/stockyard-dev/stockyard-hub/internal/store"
@@ -22,7 +23,12 @@ func main() {
 	}
 	binDir := os.Getenv("BIN_DIR")
 	if binDir == "" {
-		binDir = os.Getenv("HOME") + "/.stockyard/bin"
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			binDir = home + "/.stockyard/bin"
+		} else {
+			binDir = "/usr/local/bin"
+		}
 	}
 	os.MkdirAll(dataDir, 0755)
 
@@ -35,18 +41,18 @@ func main() {
 	mgr := tools.NewManager(binDir, dataDir)
 	srv := server.New(mgr, db)
 
-	// Start health poller
-	poller := server.NewHealthPoller(mgr, db)
+	// Start background health poller
+	poller := server.NewPoller(mgr, db, 30*time.Second)
 	poller.Start()
 	defer poller.Stop()
 
 	fmt.Printf("\n  Stockyard Hub — Tool Management Dashboard\n")
-	fmt.Printf("  ─────────────────────────────────────────\n")
+	fmt.Printf("  ──────────────────────────────────────────\n")
 	fmt.Printf("  Dashboard:  http://localhost:%s/ui\n", port)
 	fmt.Printf("  API:        http://localhost:%s/api\n", port)
 	fmt.Printf("  Data:       %s\n", dataDir)
 	fmt.Printf("  Bin dir:    %s\n", binDir)
-	fmt.Printf("  ─────────────────────────────────────────\n\n")
+	fmt.Printf("  ──────────────────────────────────────────\n\n")
 
 	log.Printf("hub: listening on :%s", port)
 	if err := http.ListenAndServe(":"+port, srv); err != nil {

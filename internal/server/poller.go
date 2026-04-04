@@ -10,23 +10,24 @@ import (
 	"github.com/stockyard-dev/stockyard-hub/internal/tools"
 )
 
-type HealthPoller struct {
-	mgr  *tools.Manager
-	db   *store.DB
-	stop chan struct{}
+type Poller struct {
+	mgr      *tools.Manager
+	db       *store.DB
+	interval time.Duration
+	stop     chan struct{}
 }
 
-func NewHealthPoller(mgr *tools.Manager, db *store.DB) *HealthPoller {
-	return &HealthPoller{mgr: mgr, db: db, stop: make(chan struct{})}
+func NewPoller(mgr *tools.Manager, db *store.DB, interval time.Duration) *Poller {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	return &Poller{mgr: mgr, db: db, interval: interval, stop: make(chan struct{})}
 }
 
-func (p *HealthPoller) Start() {
+func (p *Poller) Start() {
 	go func() {
-		// Initial poll after 5 seconds
-		time.Sleep(5 * time.Second)
 		p.poll()
-
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(p.interval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -37,43 +38,38 @@ func (p *HealthPoller) Start() {
 			}
 		}
 	}()
-	log.Printf("[health] Poller started (every 30s)")
+	log.Printf("[poller] health checks every %s", p.interval)
 }
 
-func (p *HealthPoller) Stop() {
+func (p *Poller) Stop() {
 	close(p.stop)
 }
 
-func (p *HealthPoller) poll() {
+func (p *Poller) poll() {
 	statuses := p.mgr.Discover()
-	for _, s := range statuses {
-		if !s.Installed || !s.Running {
+	for _, st := range statuses {
+		if !st.Installed {
 			continue
 		}
-		start := time.Now()
-		status := checkToolHealth(s.Port)
-		ms := int(time.Since(start).Milliseconds())
-		p.db.RecordHealth(s.Slug, status, ms)
-	}
-}
-
-func checkToolHealth(port int) string {
-	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://localhost:" + itoa(port) + "/api/health")
-	if err != nil {
-		// Try /health as fallback
-		resp, err = client.Get("http://localhost:" + itoa(port) + "/health")
-		if err != nil {
-			return "unhealthy"
+		status := "stopped"
+		responseMs := 0
+		if st.Running {
+			start := time.Now()
+			client := &http.Client{Timeout: 3 * time.Second}
+			resp, err := client.Get(fmt.Sprintf("http://localhost:%d/health", st.Port))
+			responseMs = int(time.Since(start).Milliseconds())
+			if err == nil {
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					status = "healthy"
+				} else {
+					status = "unhealthy"
+				}
+			} else {
+				status = "unhealthy"
+			}
 		}
+		p.db.RecordHealth(st.Slug, status, responseMs)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode == 200 {
-		return "healthy"
-	}
-	return "unhealthy"
-}
-
-func itoa(i int) string {
-	return fmt.Sprintf("%d", i)
+	p.db.PruneHealth(7)
 }
