@@ -56,7 +56,14 @@ func (p *Poller) poll() {
 		if st.Running {
 			start := time.Now()
 			client := &http.Client{Timeout: 3 * time.Second}
-			resp, err := client.Get(fmt.Sprintf("http://localhost:%d/health", st.Port))
+			// Try /api/health first (most tools), then /health fallback
+			resp, err := client.Get(fmt.Sprintf("http://localhost:%d/api/health", st.Port))
+			if err != nil || resp.StatusCode != 200 {
+				if resp != nil {
+					resp.Body.Close()
+				}
+				resp, err = client.Get(fmt.Sprintf("http://localhost:%d/health", st.Port))
+			}
 			responseMs = int(time.Since(start).Milliseconds())
 			if err == nil {
 				resp.Body.Close()

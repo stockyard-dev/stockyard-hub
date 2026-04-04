@@ -35,6 +35,7 @@ func New(mgr *tools.Manager, db *store.DB) *Server {
 	// Global
 	s.mux.HandleFunc("GET /api/stats", s.stats)
 	s.mux.HandleFunc("GET /api/activity", s.activity)
+	s.mux.HandleFunc("POST /api/activity", s.seedActivity)
 	s.mux.HandleFunc("GET /api/health", s.health)
 	s.mux.HandleFunc("GET /api/health-history", s.globalHealthHistory)
 
@@ -271,3 +272,18 @@ func (s *Server) setLicense(w http.ResponseWriter, r *http.Request) {
 }
 
 func init() { log.SetFlags(log.LstdFlags | log.Lshortfile) }
+
+// Seed activity (for demo)
+func (s *Server) seedActivity(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Tool   string `json:"tool"`
+		Action string `json:"action"`
+		Detail string `json:"detail"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		we(w, 400, "invalid json")
+		return
+	}
+	s.db.LogActivity(body.Tool, body.Action, body.Detail)
+	wj(w, 200, map[string]string{"status": "ok"})
+}
