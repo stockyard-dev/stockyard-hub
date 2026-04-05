@@ -51,6 +51,7 @@ func main() {
 	fmt.Printf("  Dashboard:  http://localhost:%s/ui\n", port)
 	fmt.Printf("  API:        http://localhost:%s/api\n", port)
 	fmt.Printf("  Data:       %s\n", dataDir)
+	fmt.Printf("  Questions? hello@stockyard.dev\n")
 	fmt.Printf("  Bin dir:    %s\n", binDir)
 	fmt.Printf("  ──────────────────────────────────────────\n\n")
 
